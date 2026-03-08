@@ -12,23 +12,7 @@
 # https://caddyserver.com/docs/caddyfile
 
 
-music.fritz3.org {
-	reverse_proxy 192.168.1.165:4533
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
-}
-
-photo.fritz3.org {
-	reverse_proxy 192.168.1.165:2283
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
-}
-
-navihelper.fritz3.org {
-	reverse_proxy 192.168.1.165:3000
-	tls {
-		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
-	}
+test.mydomain.com {
+	reverse_proxy ip:port
+	tls {}
 }
