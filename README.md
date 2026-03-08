@@ -1,4 +1,154 @@
-# Home Server Recovery Runbook
+# Home Server
+
+Self-hosted services running on a local Ubuntu server — Caddy handles TLS and reverse proxying, Pi-hole handles local DNS, and Cloudflare handles DNS-01 certificate issuance without exposing anything to the internet.
+
+---
+
+## Services
+
+| Service | Purpose | Port | Compose |
+|---------|---------|------|---------|
+| [Caddy](https://caddyserver.com) | Reverse proxy + automatic TLS | 80, 443 | `caddy/` |
+| [Immich](https://immich.app) | Photo & video library | 2283 | `immich/` |
+| [Navidrome](https://navidrome.org) | Music streaming | 4533 | `navidrome/` |
+| [MediaMTX](https://github.com/bluenviron/mediamtx) | RTSP/media relay | host network | `mediamtx/` |
+
+Each service lives in its own subdirectory with its own `docker-compose.yml`.
+
+---
+
+## How It Works
+
+```mermaid
+flowchart TD
+    Browser["🖥️ Your Browser\nhttps://photo.fritz3.org"]
+    Pihole["🕳️ Pi-hole\nLocal DNS Server"]
+    Caddy["🐳 Caddy\nReverse Proxy + TLS"]
+    Service["⚙️ Your Service\ne.g. Immich / Navidrome"]
+    CF["🌐 Cloudflare DNS\nfrit3.org zone"]
+    LE["🔐 Let's Encrypt\nACME CA"]
+
+    Browser -->|"1. DNS query: photo.fritz3.org?"| Pihole
+    Pihole -->|"2. Returns LAN IP 192.168.1.x"| Browser
+    Browser -->|"3. HTTPS request"| Caddy
+    Caddy -->|"4. Reverse proxy"| Service
+
+    Caddy -.->|"5. Create _acme-challenge TXT\nvia Cloudflare API"| CF
+    LE -.->|"6. Verify TXT record"| CF
+    LE -.->|"7. Issue cert"| Caddy
+
+    subgraph lan["🏠 Local Network Only"]
+        Browser
+        Pihole
+        Caddy
+        Service
+    end
+
+    subgraph internet["☁️ Internet — cert issuance only"]
+        CF
+        LE
+    end
+
+    style lan fill:#0f172a,stroke:#1e3a5f,color:#94a3b8
+    style internet fill:#0f0a00,stroke:#78350f,color:#94a3b8
+```
+
+**Solid lines** are the normal request path — entirely LAN-local. Pi-hole resolves the domain to the server's local IP, Caddy terminates TLS and proxies to the right container.
+
+**Dotted lines** only happen during cert issuance and renewal. Caddy calls the Cloudflare API to create a `_acme-challenge` TXT record, Let's Encrypt verifies it, and a certificate comes back. No inbound ports need to be open.
+
+### The Pi-hole DNS gotcha
+
+Caddy's Docker container inherits DNS from the host, which is Pi-hole. Pi-hole has a local override for the domain, so when Caddy tries to look up Cloudflare's nameservers to place the TXT record, Pi-hole intercepts it and returns `SERVFAIL`.
+
+**Fix:** add `dns` to Caddy's compose service so it bypasses Pi-hole for its own lookups:
+
+```yaml
+services:
+  caddy:
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+```
+
+Your other devices are unaffected — only the Caddy container uses these resolvers.
+
+---
+
+## Setup
+
+### Prerequisites
+
+- Docker + Docker Compose
+- A Cloudflare-managed domain
+- Pi-hole (or any local DNS) with an override pointing your subdomains to the server's LAN IP
+
+### 1. Create the external Caddy data volume
+
+Caddy stores certificates in a named volume marked `external: true`. Create it once before first run:
+
+```bash
+docker volume create caddy_data
+```
+
+### 2. Set the Cloudflare API token
+
+Create a `.env` file in `caddy/`:
+
+```bash
+# caddy/.env
+CLOUDFLARE_API_TOKEN=your_token_here
+```
+
+The token needs **Zone / DNS / Edit** permissions for your domain. A scoped token (one zone only) is recommended over a Global API Key.
+
+### 3. Configure the Caddyfile
+
+Copy the example and edit it with your subdomains and backend addresses:
+
+```bash
+cp caddy/Caddyfile.example caddy/Caddyfile
+```
+
+Minimal example for two services:
+
+```
+photo.fritz3.org {
+    reverse_proxy immich_server:2283
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+}
+
+music.fritz3.org {
+    reverse_proxy navidrome:4533
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+}
+```
+
+### 4. Add the Pi-hole local DNS override
+
+In Pi-hole's admin UI, add a **Local DNS Record** pointing your domain (or a wildcard CNAME) to the server's LAN IP — e.g. `192.168.1.x`. This is what makes HTTPS work without any traffic leaving the network.
+
+### 5. Start services
+
+Each service is started independently:
+
+```bash
+docker compose -f caddy/docker-compose.yml up -d
+docker compose -f immich/docker-compose.yml up -d
+docker compose -f navidrome/docker-compose.yml up -d
+docker compose -f mediamtx/docker-compose.yml up -d
+```
+
+---
+
+<details>
+<summary><strong>Recovery Runbook</strong> — post-incident notes after a power outage</summary>
+
+<br>
 
 ## Environment
 
@@ -13,7 +163,7 @@ Issue occurred after **power outage**.
 
 ---
 
-# Incident: Kernel Panic on Boot
+## Incident: Kernel Panic on Boot
 
 Error message:
 
@@ -30,9 +180,9 @@ The kernel could not mount the root filesystem.
 
 ---
 
-# Primary Fix (Successful)
+## Primary Fix (Successful)
 
-## 1. Boot into GRUB Recovery Mode
+### 1. Boot into GRUB Recovery Mode
 
 During boot:
 
@@ -56,7 +206,7 @@ Recovery Mode
 
 ---
 
-## 2. Run Filesystem Check
+### 2. Run Filesystem Check
 
 From recovery menu:
 
@@ -64,13 +214,7 @@ From recovery menu:
 fsck — Check all file systems
 ```
 
-This runs:
-
-```
-fsck
-```
-
-Which repairs:
+This runs `fsck`, which repairs:
 
 * inode inconsistencies
 * journal corruption
@@ -86,9 +230,9 @@ System successfully booted.
 
 ---
 
-# Post-Recovery Steps
+## Post-Recovery Steps
 
-## Force Full Filesystem Scan
+### Force Full Filesystem Scan
 
 ```bash
 sudo touch /forcefsck
@@ -99,7 +243,7 @@ Ensures a complete scan on next boot.
 
 ---
 
-## Verify Disk Health
+### Verify Disk Health
 
 Install SMART tools:
 
@@ -111,11 +255,7 @@ Check disk:
 
 ```bash
 sudo smartctl -a /dev/sda
-```
-
-or
-
-```bash
+# or
 sudo smartctl -a /dev/nvme0n1
 ```
 
@@ -129,7 +269,7 @@ Offline_Uncorrectable
 
 ---
 
-# Secondary Issue: Virtual Machine Failure
+## Secondary Issue: Virtual Machine Failure
 
 Error from VirtualBox:
 
@@ -143,9 +283,7 @@ Please disable the KVM kernel extension
 
 KVM kernel modules loaded and reserved hardware virtualization — VirtualBox and KVM cannot coexist.
 
----
-
-## Fix
+### Fix
 
 Unload KVM modules:
 
@@ -154,11 +292,7 @@ sudo modprobe -r kvm_amd
 sudo modprobe -r kvm
 ```
 
-Start VM again.
-
----
-
-## Permanent Fix (Optional)
+### Permanent Fix (Optional)
 
 Blacklist KVM modules so they never load:
 
@@ -175,14 +309,13 @@ blacklist kvm_amd
 
 Reboot.
 
-> **Note:** If you eventually migrate from VirtualBox to QEMU/libvirt (recommended below), you will
-> want to *remove* this blacklist file, as libvirt relies on KVM.
+> **Note:** If you eventually migrate from VirtualBox to QEMU/libvirt (recommended below), remove this blacklist file — libvirt relies on KVM.
 
 ---
 
-# Alternative Recovery Methods (If Recovery Mode Fails)
+## Alternative Recovery Methods (If Recovery Mode Fails)
 
-## Method 1 — Live USB Repair
+### Method 1 — Live USB Repair
 
 Boot from an Ubuntu Live USB, then:
 
@@ -198,9 +331,7 @@ sudo fsck -f /dev/sda2
 
 Reboot.
 
----
-
-## Method 2 — Rebuild Initramfs
+### Method 2 — Rebuild Initramfs
 
 From a recovery shell:
 
@@ -213,9 +344,7 @@ reboot
 
 ---
 
-# Future-Proofing: Prevention Strategy
-
-## Recommended Priority Order
+## Future-Proofing: Prevention Strategy
 
 Tackle these in order — each one builds on the last:
 
@@ -227,115 +356,76 @@ Tackle these in order — each one builds on the last:
 6. **Migrate VirtualBox → QEMU/libvirt** for Home Assistant
 7. **Consider Btrfs** if ever doing a fresh OS install or adding a new data drive
 
----
-
-## 1. Install a UPS — Most Important
+### 1. Install a UPS — Most Important
 
 A power outage is the root cause of this entire class of problem. A single UPS purchase prevents it.
 
 **Recommended brands:** APC, CyberPower
 
-**Critical:** Buy one with a **USB connection**, not just a power strip with a battery. The USB port
-is what allows the server to detect power loss and shut down gracefully. A "dumb" UPS with no USB
-is only surge protection.
+**Critical:** Buy one with a **USB connection**, not just a power strip with a battery. The USB port is what allows the server to detect power loss and shut down gracefully.
 
 Benefits:
 * Battery backup during outage
 * Graceful shutdown before battery dies
 * Surge protection
 
----
+### 2. Fix GRUB_RECORDFAIL_TIMEOUT
 
-## 2. Fix GRUB_RECORDFAIL_TIMEOUT
+After any failed or interrupted boot, GRUB's `RECORDFAIL_TIMEOUT` defaults to `-1`, meaning it will **wait forever** at the boot menu.
 
-After any failed or interrupted boot, GRUB's `RECORDFAIL_TIMEOUT` defaults to `-1`, meaning it will
-**wait forever** at the boot menu. If you're not physically present, your server will sit at a
-prompt indefinitely after a power event.
-
-Check and fix this in `/etc/default/grub`:
+Edit `/etc/default/grub`:
 
 ```bash
 sudo nano /etc/default/grub
 ```
 
-Set both values:
+Set:
 
 ```
 GRUB_TIMEOUT=5
 GRUB_RECORDFAIL_TIMEOUT=5
 ```
 
-Apply the change:
+Apply:
 
 ```bash
 sudo update-grub
 ```
 
-This ensures the server will always attempt to boot automatically, even after an unclean shutdown.
+### 3. NUT for Automatic Shutdown on Power Loss
 
----
-
-## 3. NUT for Automatic Shutdown on Power Loss
-
-NUT (Network UPS Tools) lets your server detect when the UPS switches to battery and initiate a
-safe, ordered shutdown before power runs out.
-
-### Install
+NUT (Network UPS Tools) lets your server detect when the UPS switches to battery and initiate a safe, ordered shutdown before power runs out.
 
 ```bash
 sudo apt install nut
 ```
 
-### Configure
-
-Edit `/etc/nut/nut.conf` and set:
+Edit `/etc/nut/nut.conf`:
 
 ```
 MODE=standalone
 ```
 
-Configure your UPS in `/etc/nut/ups.conf` (check NUT's hardware compatibility list for your
-model's driver).
-
-### Shutdown Order Matters
-
-Stop Docker containers **before** the OS shuts down, otherwise databases like Postgres can corrupt
-even with a UPS (if the battery runs out mid-shutdown). Add a NUT shutdown command hook:
+Stop Docker containers **before** the OS shuts down to prevent database corruption:
 
 ```bash
-# /etc/nut/upsmon.conf — add to SHUTDOWNCMD
+# /etc/nut/upsmon.conf — SHUTDOWNCMD
 SHUTDOWNCMD "docker stop $(docker ps -q) && sleep 5 && /sbin/shutdown -h now"
 ```
 
----
+### 4. Automated Backups with Restic + Healthchecks.io
 
-## 4. Automated Backups with Restic + Healthchecks.io
-
-The original runbook mentions rsync/borg/restic without emphasizing a critical point: **backups are
-useless if you never verify they work.** A backup job that silently fails for three months is the
-same as no backup at all.
-
-**Restic** is the strongest modern choice — it deduplicates, compresses, encrypts, and has a built-in
-integrity check command.
-
-### Install Restic
+**Restic** deduplicates, compresses, encrypts, and has a built-in integrity check.
 
 ```bash
 sudo apt install restic
-```
-
-### Initialize a Repository
-
-```bash
 restic init --repo /srv/backups/restic-repo
 ```
 
-### Example Backup Script
+Example backup script:
 
 ```bash
 #!/bin/bash
-# /usr/local/bin/backup.sh
-
 RESTIC_REPOSITORY="/srv/backups/restic-repo"
 RESTIC_PASSWORD_FILE="/etc/restic-password"
 
@@ -350,192 +440,60 @@ restic -r $RESTIC_REPOSITORY forget \
   --keep-weekly 4 \
   --keep-monthly 6 \
   --prune
-```
 
-### Verify Backup Integrity
-
-```bash
-restic -r /srv/backups/restic-repo check
-```
-
-### Monitor with Healthchecks.io (Free Tier)
-
-Healthchecks.io will alert you if your backup job stops running or fails. Add a ping at the end of
-your backup script:
-
-```bash
+# Ping Healthchecks.io — alerts if the job stops running
 curl -fsS --retry 3 https://hc-ping.com/YOUR-UUID-HERE > /dev/null
 ```
 
-If the ping doesn't arrive on schedule, you get an email. This means a silently failing cron job
-won't go unnoticed.
-
-### Schedule with Cron
-
-```bash
-sudo crontab -e
-```
-
-Add:
+Schedule with cron:
 
 ```
 0 3 * * * /usr/local/bin/backup.sh >> /var/log/restic-backup.log 2>&1
 ```
 
----
+### 5. Database Backup for Immich/Postgres
 
-## 5. Database Backup for Immich/Postgres
-
-A filesystem snapshot alone is **not sufficient** for a running Postgres database. The data files
-may be in an inconsistent state mid-write. Always dump Postgres before your nightly restic backup.
-
-Add this before your restic backup job:
+A filesystem snapshot is **not sufficient** for a running Postgres instance. Always dump before the nightly restic backup:
 
 ```bash
-# Dump Immich Postgres before backup
 docker exec immich_postgres pg_dumpall -U postgres \
   > /srv/backups/immich_$(date +%F).sql
-```
 
-Rotate old dumps to avoid filling disk:
-
-```bash
-# Keep last 7 daily dumps
+# Rotate — keep last 7 daily dumps
 find /srv/backups/ -name "immich_*.sql" -mtime +7 -delete
 ```
 
----
+### 6. Migrate VirtualBox → QEMU/libvirt for Home Assistant
 
-## 6. Migrate VirtualBox → QEMU/libvirt for Home Assistant
-
-The AMD-V conflict with KVM is a recurring problem that will come back every time KVM loads. The
-root issue is that **VirtualBox and KVM cannot coexist** — they both want exclusive access to
-hardware virtualization.
-
-Since you're already on Linux, QEMU/KVM with libvirt is the better long-term fit. The Home Assistant
-project itself recommends this for Linux hosts.
-
-Benefits over VirtualBox:
-* Native Linux virtualization — no AMD-V conflicts
-* Better I/O performance for Home Assistant
-* Managed by standard Linux tooling (virsh, virt-manager)
-* Works alongside Docker without module conflicts
-
-### Install
+VirtualBox and KVM cannot coexist. QEMU/KVM with libvirt is the better long-term fit on Linux.
 
 ```bash
 sudo apt install qemu-kvm libvirt-daemon-system virt-manager
 sudo usermod -aG libvirt $USER
 ```
 
-### Remove the KVM Blacklist
-
-If you previously blacklisted KVM modules (from the fix above), remove that file before using libvirt:
+Remove the KVM blacklist if you added one:
 
 ```bash
 sudo rm /etc/modprobe.d/blacklist-kvm.conf
 sudo reboot
 ```
 
-### Import Your Home Assistant VM
+The Home Assistant project provides a `.qcow2` image for KVM/QEMU directly at https://www.home-assistant.io/installation/linux.
 
-Export your existing VM from VirtualBox as an `.ova` file, then import:
-
-```bash
-virt-convert homeassistant.ova -o virt-image
-```
-
-Or start fresh — the Home Assistant project provides a `.qcow2` image for KVM/QEMU directly at
-[https://www.home-assistant.io/installation/linux](https://www.home-assistant.io/installation/linux).
-
----
-
-## 7. Use a More Resilient Filesystem (Long-Term)
-
-The original runbook suggests ZFS or Btrfs. Both are valid, but with important caveats:
+### 7. Filesystem (Long-Term)
 
 | Filesystem | Benefit | Caveat |
 |------------|---------|--------|
-| ZFS | Checksums, self-healing, excellent for RAID | Memory-hungry — wants 8GB+ RAM for ARC cache |
-| Btrfs | Snapshots, corruption detection, in-kernel | Less mature than ZFS for RAID configs |
+| ZFS | Checksums, self-healing, excellent for RAID | Memory-hungry — wants 8GB+ RAM |
+| Btrfs | Snapshots, corruption detection, in-kernel | Less mature than ZFS for RAID |
 | ext4 (current) | Stable, simple | No checksums, no snapshots |
 
-**Recommendation:** For a typical homelab media server, **Btrfs is the more practical choice.**
-It's already in the Linux kernel, requires no extra RAM, handles snapshots well, and pairs cleanly
-with Docker bind mounts.
-
-> **Note:** Migrating your root filesystem is disruptive — you'd need to back everything up and
-> reinstall. This is worth doing eventually but is the lowest priority item on this list. Consider
-> it the next time you do a fresh OS install or add a new data drive.
+For a typical homelab media server, **Btrfs is the more practical choice** — in-kernel, no extra RAM, handles snapshots well. Worth considering on the next fresh OS install or new data drive.
 
 ---
 
-## 8. Postgres Durability Settings
-
-For any Postgres instance (including Immich's), these settings ensure safe crash recovery:
-
-```
-synchronous_commit = on
-full_page_writes = on
-wal_sync_method = fdatasync
-```
-
-Apply these in your `postgresql.conf` or via Docker environment variables, then restart the container.
-
----
-
-## 9. Docker Storage Best Practice — Bind Mounts
-
-Never rely on Docker's container overlay storage for persistent data. Always use bind mounts so
-your data lives at a known path on the host filesystem and survives container re-creation.
-
-```yaml
-volumes:
-  - /srv/postgres:/var/lib/postgresql/data
-  - /srv/music:/music
-  - /srv/immich:/usr/src/app/upload
-```
-
----
-
-## 10. Fix systemd Service Dependencies
-
-After a rough reboot, Docker services sometimes race and fail to start because Docker wasn't ready
-in time. Ensure your service unit files declare proper ordering:
-
-```ini
-[Unit]
-After=network-online.target docker.service
-Requires=docker.service
-```
-
-Check your existing services:
-
-```bash
-sudo systemctl cat docker-compose@.service
-```
-
----
-
-## 11. Out-of-Band Access (Remote Recovery)
-
-If this happens again while you're away from home, how do you recover? Consider:
-
-* **Tailscale** — install on your server so you can SSH in after a partial boot, even without port
-  forwarding on your router. Free for personal use.
-* **Raspberry Pi as serial console** — connect a Pi to your server via serial/USB and get a
-  terminal even if the network is down.
-
-At minimum, install Tailscale now as a safety net:
-
-```bash
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo tailscale up
-```
-
----
-
-# Recommended Server Directory Layout
+## Recommended Directory Layout
 
 ```
 /srv
@@ -548,21 +506,7 @@ sudo tailscale up
 
 ---
 
-# Summary
-
-**Primary failure cause:**
-
-```
-Power outage → filesystem journal corruption → kernel panic
-```
-
-**Recovery:**
-
-```
-GRUB → Recovery Mode → fsck → resume
-```
-
-**Future protection — in priority order:**
+## Summary
 
 | # | Action | Impact |
 |---|--------|--------|
@@ -573,3 +517,5 @@ GRUB → Recovery Mode → fsck → resume
 | 5 | pg_dump before backup | Safe Postgres snapshots |
 | 6 | Migrate to QEMU/libvirt | Eliminate AMD-V conflicts permanently |
 | 7 | Btrfs (next fresh install) | Checksums + snapshots at the filesystem level |
+
+</details>
