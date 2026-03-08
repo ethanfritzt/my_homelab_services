@@ -6,6 +6,6 @@ services:
       - "4533:4533"
     restart: unless-stopped
     volumes:
-      - "/media/ethan/Carl6/music/cache:/data"
-      - "/media/ethan/Carl6/music/library:/music:ro"
+      - "/home/ethan/Music/cache:/data"
+      - "/home/ethan/Music/library:/music:ro"
 

@@ -1,0 +1,9 @@
+services:
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: mediamtx-rtsp
+    restart: unless-stopped
+    volumes:
+      - /home/ethan/my_homelab_services/mediamtx/mediamtx.yml:/mediamtx.yml
+    network_mode: host
+
