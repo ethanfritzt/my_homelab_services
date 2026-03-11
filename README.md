@@ -12,6 +12,7 @@ Self-hosted services running on a local Ubuntu server — Caddy handles TLS and 
 | [Immich](https://immich.app) | Photo & video library | 2283 | `immich/` |
 | [Navidrome](https://navidrome.org) | Music streaming | 4533 | `navidrome/` |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | RTSP/media relay | host network | `mediamtx/` |
+| [Obsidian LiveSync](https://github.com/vrtmrz/obsidian-livesync) | Note sync (CouchDB) | 5984 | `obsidian/` |
 
 Each service lives in its own subdirectory with its own `docker-compose.yml`.
 
@@ -141,7 +142,69 @@ docker compose -f caddy/docker-compose.yml up -d
 docker compose -f immich/docker-compose.yml up -d
 docker compose -f navidrome/docker-compose.yml up -d
 docker compose -f mediamtx/docker-compose.yml up -d
+docker compose -f obsidian/docker-compose.yml up -d
 ```
+
+---
+
+## Obsidian LiveSync Setup
+
+Self-hosted note synchronization using [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) plugin with CouchDB backend. Supports end-to-end encryption.
+
+### 1. Create credentials
+
+```bash
+cp obsidian/.env.example obsidian/.env
+# Edit obsidian/.env with your username and password
+```
+
+### 2. Create data directories
+
+```bash
+mkdir -p obsidian/couchdb-data obsidian/couchdb-etc
+sudo chown -R 5984:5984 obsidian/couchdb-data obsidian/couchdb-etc
+```
+
+### 3. Start CouchDB
+
+```bash
+docker compose -f obsidian/docker-compose.yml up -d
+```
+
+### 4. Initialize CouchDB
+
+Run once after first boot to configure CORS and required settings:
+
+```bash
+source obsidian/.env
+curl -s https://raw.githubusercontent.com/vrtmrz/obsidian-livesync/main/utils/couchdb/couchdb-init.sh | \
+  hostname=http://localhost:5984 \
+  username=$COUCHDB_USER \
+  password=$COUCHDB_PASSWORD \
+  bash
+```
+
+### 5. Add Caddyfile entry
+
+Add the `notes.mydomain.com` block from `Caddyfile.example` to your Caddyfile, updating the domain. The CORS headers are required for Obsidian desktop and mobile apps.
+
+### 6. Add Pi-hole DNS override
+
+Add a local DNS record for `notes.yourdomain.com` pointing to your server's LAN IP.
+
+### 7. Install the Obsidian plugin
+
+1. Install **Self-hosted LiveSync** from Obsidian Community Plugins
+2. Generate a Setup URI (optional but recommended):
+   ```bash
+   export hostname=https://notes.yourdomain.com
+   export database=obsidian
+   export passphrase=your_e2ee_passphrase
+   export username=your_couchdb_user
+   export password=your_couchdb_password
+   deno run -A https://raw.githubusercontent.com/vrtmrz/obsidian-livesync/main/utils/flyio/generate_setupuri.ts
+   ```
+3. Use the Setup URI in Obsidian via Command Palette → "Use the copied setup URI"
 
 ---
 

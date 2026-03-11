@@ -1,0 +1,6 @@
+# Environment file with credentials
+.env
+
+# CouchDB data directories
+couchdb-data/
+couchdb-etc/

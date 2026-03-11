@@ -16,3 +16,31 @@ test.mydomain.com {
 	reverse_proxy ip:port
 	tls {}
 }
+
+# Obsidian LiveSync (CouchDB)
+# Requires CORS headers for Obsidian desktop and mobile apps
+notes.mydomain.com {
+	reverse_proxy localhost:5984
+
+	# CORS headers required by Obsidian apps
+	@cors_preflight method OPTIONS
+	handle @cors_preflight {
+		header Access-Control-Allow-Origin "{header.Origin}"
+		header Access-Control-Allow-Methods "GET, PUT, POST, HEAD, DELETE"
+		header Access-Control-Allow-Headers "accept, authorization, content-type, origin, referer"
+		header Access-Control-Allow-Credentials "true"
+		header Access-Control-Max-Age "3600"
+		respond "" 204
+	}
+
+	header {
+		Access-Control-Allow-Origin "{header.Origin}"
+		Access-Control-Allow-Methods "GET, PUT, POST, HEAD, DELETE"
+		Access-Control-Allow-Headers "accept, authorization, content-type, origin, referer"
+		Access-Control-Allow-Credentials "true"
+	}
+
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+}
