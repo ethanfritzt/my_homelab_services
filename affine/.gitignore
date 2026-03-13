@@ -1,0 +1,7 @@
+# Environment file with credentials
+.env
+
+# Data directories
+postgres/
+storage/
+config/

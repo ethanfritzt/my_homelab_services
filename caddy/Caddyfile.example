@@ -17,7 +17,7 @@ test.mydomain.com {
 	tls {}
 }
 
-# Docmost (collaborative docs)
+# AFFiNE (docs, whiteboards & knowledge base)
 notes.mydomain.com {
 	reverse_proxy localhost:3030
 	tls {

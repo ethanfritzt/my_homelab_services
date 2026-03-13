@@ -12,7 +12,7 @@ Self-hosted services running on a local Ubuntu server — Caddy handles TLS and 
 | [Immich](https://immich.app) | Photo & video library | 2283 | `immich/` |
 | [Navidrome](https://navidrome.org) | Music streaming | 4533 | `navidrome/` |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | RTSP/media relay | host network | `mediamtx/` |
-| [Docmost](https://docmost.com) | Collaborative docs & wiki | 3030 | `docmost/` |
+| [AFFiNE](https://affine.pro) | Docs, whiteboards & knowledge base | 3030 | `affine/` |
 
 Each service lives in its own subdirectory with its own `docker-compose.yml`.
 
@@ -142,57 +142,63 @@ docker compose -f caddy/docker-compose.yml up -d
 docker compose -f immich/docker-compose.yml up -d
 docker compose -f navidrome/docker-compose.yml up -d
 docker compose -f mediamtx/docker-compose.yml up -d
-docker compose -f docmost/docker-compose.yml up -d
+docker compose -f affine/docker-compose.yml up -d
 ```
 
 ---
 
-## Docmost Setup
+## AFFiNE Setup
 
-Self-hosted collaborative documentation and wiki powered by [Docmost](https://docmost.com). Features a real-time collaborative editor, spaces, page trees, and full-text search.
+Self-hosted knowledge base powered by [AFFiNE](https://affine.pro) — an open-source alternative to Notion with docs, whiteboards, and databases. Supports real-time collaboration via WebSocket and has desktop and mobile apps.
 
 ### 1. Create environment file
 
 ```bash
-cp docmost/.env.example docmost/.env
+cp affine/.env.example affine/.env
 ```
 
-Edit `docmost/.env`:
+Edit `affine/.env`:
 
-- Set `APP_URL` to your full domain (e.g. `https://notes.yourdomain.com`)
-- Generate `APP_SECRET` with `openssl rand -hex 32`
-- Set a strong `POSTGRES_PASSWORD`
-- Update the password in `DATABASE_URL` to match `POSTGRES_PASSWORD`
+- Set `AFFINE_SERVER_HOST` to your domain (e.g. `notes.yourdomain.com`)
+- Set a strong `DB_PASSWORD`
 
-### 2. Start services
+### 2. Create data directories
 
 ```bash
-docker compose -f docmost/docker-compose.yml up -d
+mkdir -p affine/postgres affine/storage affine/config
 ```
 
-This starts three containers: Docmost (app), PostgreSQL (database), and Redis (cache).
+### 3. Start services
 
-### 3. Add Caddyfile entry
+```bash
+docker compose -f affine/docker-compose.yml up -d
+```
 
-Add the `notes.mydomain.com` block from `Caddyfile.example` to your Caddyfile, updating the domain. Caddy natively supports WebSocket proxying, which Docmost's real-time editor requires.
+This starts four containers: AFFiNE (app), a one-shot migration job, PostgreSQL (with pgvector), and Redis. The migration container runs database migrations automatically and exits before the main app starts.
 
-### 4. Add Pi-hole DNS override
+### 4. Add Caddyfile entry
+
+Add the `notes.mydomain.com` block from `Caddyfile.example` to your Caddyfile, updating the domain. Caddy natively supports WebSocket proxying, which AFFiNE's real-time editor requires.
+
+### 5. Add Pi-hole DNS override
 
 Add a local DNS record for `notes.yourdomain.com` pointing to your server's LAN IP.
 
-### 5. Complete web setup
+### 6. Complete web setup
 
-Navigate to `https://notes.yourdomain.com` in your browser. You'll see the Docmost setup page where you can create your workspace and admin account.
+Navigate to `https://notes.yourdomain.com` in your browser. Create your admin account — the first registered user becomes the workspace owner.
 
-### Health check
+After logging in, go to **Admin -> Settings -> Server** and set the **External URL** to `https://notes.yourdomain.com`. This ensures invitation links and shared doc URLs are generated correctly.
 
-A dedicated health endpoint is available at `https://notes.yourdomain.com/api/health`.
+### Desktop & mobile apps
+
+AFFiNE has desktop apps (macOS, Windows, Linux) and mobile apps (iOS, Android). After setup, you can connect them to your self-hosted instance by adding your server URL in the app settings.
 
 ### Upgrade
 
 ```bash
-docker pull docmost/docmost:latest
-docker compose -f docmost/docker-compose.yml up --force-recreate --build docmost -d
+docker compose -f affine/docker-compose.yml pull
+docker compose -f affine/docker-compose.yml up -d
 ```
 
 ---
