@@ -12,7 +12,7 @@ Self-hosted services running on a local Ubuntu server — Caddy handles TLS and 
 | [Immich](https://immich.app) | Photo & video library | 2283 | `immich/` |
 | [Navidrome](https://navidrome.org) | Music streaming | 4533 | `navidrome/` |
 | [MediaMTX](https://github.com/bluenviron/mediamtx) | RTSP/media relay | host network | `mediamtx/` |
-| [AFFiNE](https://affine.pro) | Docs, whiteboards & knowledge base | 3030 | `affine/` |
+| [SilverBullet](https://silverbullet.md) | Markdown knowledge base | 3030 | `silverbullet/` |
 
 Each service lives in its own subdirectory with its own `docker-compose.yml`.
 
@@ -142,63 +142,67 @@ docker compose -f caddy/docker-compose.yml up -d
 docker compose -f immich/docker-compose.yml up -d
 docker compose -f navidrome/docker-compose.yml up -d
 docker compose -f mediamtx/docker-compose.yml up -d
-docker compose -f affine/docker-compose.yml up -d
+docker compose -f silverbullet/docker-compose.yml up -d
 ```
 
 ---
 
-## AFFiNE Setup
+## SilverBullet Setup
 
-Self-hosted knowledge base powered by [AFFiNE](https://affine.pro) — an open-source alternative to Notion with docs, whiteboards, and databases. Supports real-time collaboration via WebSocket and has desktop and mobile apps.
+Self-hosted markdown knowledge base powered by [SilverBullet](https://silverbullet.md). All notes are stored as plain `.md` files on disk — no database required. Runs as a single container and works offline as a PWA.
 
 ### 1. Create environment file
 
 ```bash
-cp affine/.env.example affine/.env
+cp silverbullet/.env.example silverbullet/.env
 ```
 
-Edit `affine/.env`:
+Edit `silverbullet/.env` and set a strong `SB_USER` password (format: `username:password`).
 
-- Set `AFFINE_SERVER_HOST` to your domain (e.g. `notes.yourdomain.com`)
-- Set a strong `DB_PASSWORD`
-
-### 2. Create data directories
+### 2. Start the service
 
 ```bash
-mkdir -p affine/postgres affine/storage affine/config
+docker compose -f silverbullet/docker-compose.yml up -d
 ```
 
-### 3. Start services
+This starts a single container. The `space/` directory is created automatically on first run and holds all your markdown notes.
 
-```bash
-docker compose -f affine/docker-compose.yml up -d
-```
+### 3. Add Caddyfile entry
 
-This starts four containers: AFFiNE (app), a one-shot migration job, PostgreSQL (with pgvector), and Redis. The migration container runs database migrations automatically and exits before the main app starts.
+Add the `notes.mydomain.com` block from `Caddyfile.example` to your Caddyfile, updating the domain.
 
-### 4. Add Caddyfile entry
-
-Add the `notes.mydomain.com` block from `Caddyfile.example` to your Caddyfile, updating the domain. Caddy natively supports WebSocket proxying, which AFFiNE's real-time editor requires.
-
-### 5. Add Pi-hole DNS override
+### 4. Add Pi-hole DNS override
 
 Add a local DNS record for `notes.yourdomain.com` pointing to your server's LAN IP.
 
-### 6. Complete web setup
+### 5. Log in
 
-Navigate to `https://notes.yourdomain.com` in your browser. Create your admin account — the first registered user becomes the workspace owner.
+Navigate to `https://notes.yourdomain.com` and log in with the credentials from `SB_USER`. For offline access, install SilverBullet as a PWA from your browser (Chrome: three-dot menu -> "Install SilverBullet").
 
-After logging in, go to **Admin -> Settings -> Server** and set the **External URL** to `https://notes.yourdomain.com`. This ensures invitation links and shared doc URLs are generated correctly.
+### Filesystem MCP access
 
-### Desktop & mobile apps
+Your notes live as plain markdown files in `silverbullet/space/`. Point a filesystem MCP server at this directory to give AI tools direct read/write access to your knowledge base:
 
-AFFiNE has desktop apps (macOS, Windows, Linux) and mobile apps (iOS, Android). After setup, you can connect them to your self-hosted instance by adding your server URL in the app settings.
+```json
+{
+  "mcpServers": {
+    "notes": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-server-filesystem",
+        "/path/to/silverbullet/space"
+      ]
+    }
+  }
+}
+```
 
 ### Upgrade
 
 ```bash
-docker compose -f affine/docker-compose.yml pull
-docker compose -f affine/docker-compose.yml up -d
+docker compose -f silverbullet/docker-compose.yml pull
+docker compose -f silverbullet/docker-compose.yml up -d
 ```
 
 ---

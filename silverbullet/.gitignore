@@ -1,0 +1,5 @@
+# Environment file with credentials
+.env
+
+# Notes data directory
+space/

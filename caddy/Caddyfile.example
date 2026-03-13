@@ -17,7 +17,7 @@ test.mydomain.com {
 	tls {}
 }
 
-# AFFiNE (docs, whiteboards & knowledge base)
+# SilverBullet (markdown knowledge base)
 notes.mydomain.com {
 	reverse_proxy localhost:3030
 	tls {

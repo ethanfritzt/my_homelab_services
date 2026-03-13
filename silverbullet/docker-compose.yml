@@ -1,0 +1,11 @@
+services:
+  silverbullet:
+    image: ghcr.io/silverbulletmd/silverbullet:latest
+    container_name: silverbullet
+    restart: unless-stopped
+    environment:
+      - SB_USER=${SB_USER}
+    volumes:
+      - ./space:/space
+    ports:
+      - "3030:3000"
