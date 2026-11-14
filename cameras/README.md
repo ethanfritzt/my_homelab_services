@@ -1,16 +1,47 @@
 # Cameras → MediaMTX
 
-Cameras **camone** and **camtwo** publish into MediaMTX on the Docker VM (**192.168.1.167**).
+Both **camone** and **camtwo** run the same script (`publish-stream.sh`) and publish into MediaMTX on the Docker VM (**192.168.1.167**).
 
-## Publish (not in this repo)
+## Per-camera settings
 
-| Piece | Detail |
-|-------|--------|
-| Script | `/home/cam/publish-stream.sh` |
-| Service | `camera-stream.service` |
-| Target | mediamtx.fritz3.org (resolves to 192.168.1.167 via AdGuard) |
+| Camera | Pi IP | STREAM_NAME | PORT |
+|--------|-------|-------------|------|
+| camone | 192.168.1.234 | camone | 5000 |
+| camtwo | 192.168.1.171 | camtwo | 5001 |
 
-Those host files live outside this repository.
+Target hostname: **mediamtx.fritz3.org** (AdGuard resolves it to 192.168.1.167).
+
+## Deploy
+
+Copy the script to `/home/cam/publish-stream.sh` on each Pi, then set env via a systemd drop-in:
+
+```bash
+sudo systemctl edit camera-stream.service
+```
+
+camone:
+
+```ini
+[Service]
+Environment=STREAM_NAME=camone
+Environment=PORT=5000
+```
+
+camtwo:
+
+```ini
+[Service]
+Environment=STREAM_NAME=camtwo
+Environment=PORT=5001
+```
+
+Then restart:
+
+```bash
+sudo systemctl restart camera-stream.service
+```
+
+Note: the Pis currently still run older per-cam copies with values hardcoded; migrating them is a separate step.
 
 ## MediaMTX paths
 
