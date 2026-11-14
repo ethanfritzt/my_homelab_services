@@ -3,8 +3,7 @@
 # Captures with libcamera/rpicam-vid and pushes UDP MPEG-TS; MediaMTX serves it as RTSP
 
 # Configuration - These values are set via environment variables by the systemd service
-# SERVER_IP and STREAM_NAME should be set in the systemd service file
-# They are configured during setup by init-camera-node.sh
+# SERVER_IP, STREAM_NAME, and PORT should be set in the systemd service / drop-in
 
 # Get current username
 CURRENT_USER=$(whoami)

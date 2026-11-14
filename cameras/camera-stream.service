@@ -1,0 +1,35 @@
+# camera-stream.service — publish Pi camera to MediaMTX via UDP MPEG-TS
+#
+# STREAM_NAME and PORT come from a drop-in:
+#   sudo systemctl edit camera-stream.service
+#
+# Example drop-in:
+#   [Service]
+#   Environment=STREAM_NAME=camone
+#   Environment=PORT=5000
+#
+# Optional: Environment=SERVER_IP=mediamtx.fritz3.org (script default)
+#
+# Management:
+#   sudo systemctl status camera-stream
+#   sudo systemctl restart camera-stream
+#   journalctl -u camera-stream -f
+
+[Unit]
+Description=Camera Stream to MediaMTX
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cam
+WorkingDirectory=/home/cam
+ExecStart=/bin/bash /home/cam/publish-stream.sh
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+Environment=HOME=/home/cam
+
+[Install]
+WantedBy=multi-user.target
