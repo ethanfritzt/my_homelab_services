@@ -8,7 +8,7 @@ Cameras **camone** and **camtwo** publish into MediaMTX on the Docker VM (**192.
 |-------|--------|
 | Script | `/home/cam/publish-stream.sh` |
 | Service | `camera-stream.service` |
-| Target | 192.168.1.167 |
+| Target | mediamtx.fritz3.org (resolves to 192.168.1.167 via AdGuard) |
 
 Those host files live outside this repository.
 
