@@ -1,4 +1,3 @@
 *.env
 immich/library
 immich/postgres
-caddy/Caddyfile
