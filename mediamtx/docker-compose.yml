@@ -1,6 +1,6 @@
 services:
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    image: bluenviron/mediamtx@sha256:59aaad04627c7c8f40ceb01a5ff1c43f91e01939da147c3419f1aaa0c78d6cf5
     container_name: mediamtx-rtsp
     restart: unless-stopped
     volumes:
