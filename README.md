@@ -55,3 +55,4 @@ On the Docker VM (`192.168.1.167`):
 - [docs/restore.md](docs/restore.md) — Proxmox-era rebuild outline
 - [docs/home-assistant.md](docs/home-assistant.md) — HAOS VM notes
 - [cameras/README.md](cameras/README.md) — camera publish → MediaMTX
+- [mediamtx/README.md](mediamtx/README.md) — MediaMTX on the Docker VM (paths, ports, status)
