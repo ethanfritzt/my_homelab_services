@@ -14,6 +14,8 @@ Both **camone** and **camtwo** run the same script (`publish-stream.sh`) and pub
 
 Current publish settings: **640×480 @ 15 fps**, UDP MPEG-TS, **no publish auth**. MediaMTX runs in Docker (`network_mode: host`) on the Docker VM and serves RTSP/WebRTC/HLS to viewers.
 
+Parts for the next camera (smaller board, better sensor, priced against Blink): [v2-bom.md](v2-bom.md).
+
 ## Per-camera settings
 
 | Camera | Pi IP | STREAM_NAME | PORT |
